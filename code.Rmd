@@ -1,0 +1,466 @@
+---
+title: "DSA 8023 : Suspected EV Customers Challenge"
+author: "Akshay Kumar Dhar (40360300)"
+output:
+  pdf_document: default
+        
+---
+
+
+# INTRODUCTION
+
+The proliferation of Electric vehicles (EVs) are becoming more and more common, which has given businesses new opportunities and problems.
+Ireland   is not an outlier when it comes to how the rise of electric vehicles (EVs) has altered the automotive environment. Based on market research , 70,000 EV clients have been identified by Energia, one of the top energy suppliers in the nation, with Energia customers making up 10% of those customers. Only 2.4K of those customers have been recognized as being on the EV tariff plain, though, which is a very small percentage. Finding the remaining suspected EV users who are not on the EV tariff plain will be a huge issue for Energia in light of this. 
+In order to meet this problem, data analysis is essential for finding patterns and gaining insights that can help Energia group optimise their tactics and operations.
+
+
+The goal is to identify patterns in the usage and consumption of EV customers and use these insights to identify a cohort of Non-EV customers that exhibit similar behavior, thus potentially indicating that they are EV owners. By doing so, we can help our client target their marketing and operational efforts towards potential EV owners, which could lead to increased revenue and a more sustainable future.
+
+The main objective of this analysis is to identify patterns in the usage and consumption of EV customers and find a cohort of non-EV customers with similar patterns, which could be highly suspicious of being EV customers.
+
+
+```{r include=FALSE}
+
+library(readxl)
+library(rlang)
+library(dplyr)
+library(matrixStats)
+library(ggplot2)
+library(psych)
+library(caret)
+library(tidyverse)
+library(rpart)
+library(rpart.plot)
+library(readr)
+library(nnet)
+library(melt)
+library(reshape2)
+library(corrplot)
+library(patchwork)
+
+
+```
+
+
+# METHODOLOGY
+
+The very first step in Data analysis is  EDA  (Exploratory Data Analysis).EDA is a crucial step in the data analysis process as it enables analysts to understand the characteristics of the dataset they are working with.By performing EDA, one can identify patterns, relationships, and anomalies in the data, which can help to make more informed decisions about how to analyze and model the data.
+
+EDA can help to identify missing values, outliers, and other data quality issues that may need to be addressed before further analysis is conducted, EDA techniques include summary statistics, data visualization, and hypothesis testing, among others, and the appropriate method will depend on the nature of the data and the research question being addressed.
+
+Ultimately, the goal of EDA is to gain insights into the data that can inform subsequent analyses and help to produce accurate and reliable results.
+
+•	Data collection : The process of gathering data creates the groundwork for later data analysis and modelling. In order to ensure that the data are correct, comprehensive, and pertinent to the research issue being addressed, effective data collection requires careful planning, recording, and administration. In this instance, the data set has already been provided.
+
+- Using bind_rows() to combine the two independent data sets after reading each of them using read_excel().
+- The data set contains 25 column and a total of 186,558 observations
+- using summary() to study the minimum, first quartile , median, mean, third quartile , and maximum values for each column
+
+##### Insights about the Data set 
+
+- Billing data for every customer since 2021 , Every customer is billed every 2 months resulting in 6 billing/consumption data in KwH for every customer in a year. The data contains billing data for 26 months equivalent to 2 years (2021,2022) and 2 months until Feb 2023.
+- Date of joining Energia , not every client joined at the same time, so depending on the customer's date of joining Energia the information differ from one customer to the next.
+- Contains information of every customer whether the consumer is a brand-new client who selected the EV Tariff plain or an existing client of Energia who at some point made the transition to the EV Tariff Plain.
+- The set of data includes details about the age range of the clients, details about the channel(s) through which the consumer was attracted.
+- Includes information indicating whether an customer is an EV customer or not (Y/N) & information about Mosiac Type -Consumer Segmentation.
+- Also, the data set contains details about the General Contract Start Date & General Contract End Date
+
+•	Data cleaning : Data cleaning entails preparing the data to eliminate outliers, duplicates, and missing values as well as converting the data into a format that can be used for analysis.
+
+- Using subset() and The "%>%" operator from the "dplyr" package,removes a subset of columns from the data set and stores the resulting data in a new data frame named data_clean for further analysis.
+- We examined the null values in the data set using is.null(), and zero (0) null values were found.
+- Only 6 N/A values are displayed in the agedBand column after using the functions colSums() and is.na() to check the N/A values in the data set. Before creating statistical or predictive models, the preprocessing of the data will address the N/A values.
+- Using str(), the data's structure was shown to consist of 13 numeric columns and 5 character type columns.
+
+
+```{r include=FALSE}
+# reading the data file using read_excel()
+exceldata1<-read_excel ("C:\\Users\\AKSHAY KUMAR DHAR\\OneDrive - Queen's University Belfast\\project\\data file and pdfs\\WB1_Energia_Challenge_March_2023_Data.xlsx" ,sheet= "Data1") 
+
+head(exceldata1,10)
+
+exceldata2<-read_excel ("C:\\Users\\AKSHAY KUMAR DHAR\\OneDrive - Queen's University Belfast\\project\\data file and pdfs\\WB2_Energia_Challenge_March_2023_Data.xlsx" ,sheet= "Data2") 
+
+head(exceldata2,10)
+
+# merging the two excel files
+# Mergeing the two files using the bind_rows() function from the dplyr package
+combine_data <- bind_rows(exceldata1, exceldata2)
+head(combine_data,5)
+
+print(summary(combine_data)) # summary of data set all together
+colnames(combine_data) # columns names of the data frame
+
+
+
+
+#removing all the unnecessary columns (cleaning the data)
+data_clean <- combine_data %>% 
+  subset(select = -c(accountID,StartDate,ContractStartDateEV,contractStartDate,contractEndDate,title,saStatus))
+
+
+#checking all th emissing values,duplicate  and N/A values 
+
+sum(is.null(data_clean))
+colSums(is.na(data_clean))
+colnames(data_clean)
+str(data_clean)
+
+```
+
+•	Data visualization :Data visualization is a potent tool that, by visualizing complex data, aids in its understanding. Users can easily spot trends, connections, and anomalies because to it, which improves understanding and decision-making.
+
+- The "signedUpGroup," "agedBand," "mosaicType," and "EV" columns of the data frame are returned as a vector of unique values using the unique() function. In order to undertake data analysis and visualization, it is useful to understand the distinct categories or groups that are present in a particular column in the data set.
+- Using  ggplot2 package's ggplot() method to visualize different column of the data set to gain information.
+   - In the first plot the frequency of each level of the "signedUpGroup" variable in the data frame is plotted as a bar chart, with each level represented by a different colour bar. The plot gives us the information that "other" channel is highest in terms of coustomer acquisition with count of 43523, followed by "Telesales" being the secound with a count of  39685.
+   -  In the second plot the frequency of each level of the "agedBand" variable in the data frame is plotted as a bar chart, with each level represented by a different colour bar. The plot gives us the information that those customer whose age group  are unclassified being the highest with count of 112051, followed by the age group 41 to 50 being the second with a count of 19708 and age group 25 to 40 being the third highest age band with count of 19632, their is only a marginal difference between the two age group with only a difference of 76 .
+   - The third plot represents the frequency of each level of the "EV" variable in the data frame is plotted as a bar chart, with each level represented by a different colour bar. The plot concludes that the highest being the NON- EV customers and then the EV customer with counts of 184042 and 2516  respectively. based on this information we will  separate the data in EV and NON - EV customers
+   - The forth plot also represents the frequency of each level of the "EV_New_or_Old" variable in the data frame is plotted as a bar chart, with each level represented by a different colour bar. The plot informs visuals about the different counts of customers wich are Non-EV Customer ,New EV Customer and those customers which Switched to EV with respective counts of 184042, 873 and 1643.
+
+
+```{r include=FALSE}
+#using unique() to get the unique values 
+unique(data_clean$signedUpGroup) 
+unique(data_clean$agedBand)
+unique(data_clean$mosaicType)
+unique(data_clean$EV)
+# creating plots with ggplot()
+G1<-ggplot(data_clean, aes(x = signedUpGroup,fill=signedUpGroup))+
+  geom_bar()+labs( x = "signed Up Group", y = "count")+theme(axis.text.x = element_blank())
+
+print(sum(data_clean$signedUpGroup == "Other" )) 
+print(sum(data_clean$signedUpGroup == "Telesales"))
+
+G2<-ggplot(data_clean, aes(x = agedBand,fill=agedBand))+
+  geom_bar()+labs( x = "Age Group", y = "count")+theme(axis.text.x = element_blank())
+
+table(data_clean$agedBand, useNA = "ifany")
+
+
+G3<-ggplot(data_clean, aes(x = EV,fill=EV))+
+  geom_bar()+labs( x = "Customer Vehical Type", y = "count")+theme(axis.text.x = element_blank())
+
+table(data_clean$EV, useNA = "ifany")
+
+G4<-ggplot(data_clean, aes(x = EV_New_or_Old,fill=EV_New_or_Old))+
+  geom_bar()+labs( x = "Customer", y = "count")+theme(axis.text.x = element_blank())
+ 
+table(data_clean$EV_New_or_Old, useNA = "ifany")
+
+
+```
+
+
+```{r echo=FALSE}
+(G1/G2/G3/G4)+plot_layout(ncol=2,nrow=2)
+
+```
+•Feature engineering:The process of feature engineering entails developing brand-new variables/column/rows  or altering already-existing variables/column/rows to enhance the functionality of machine learning models. This process, which is usually carried out following EDA, may include feature selection, scaling, normalization, and one-hot encoding.
+
+- Modifying the data frame with the dplyr package's mutate() function  to add three new columns with names "consumption 2021," "consumption 2022," and "consumption 2023". By adding up values of the appropriate "bill" columns for each year, the values for each of these additional columns are determined. By completing this feature engineering, we are able to obtain each customer's consumption information for the years 2021, 2022, and 2023.
+- Created a new data frame called "MeanConsumption_by_year" that contains the mean annual electricity use for each client against their corresponding year. This is done by using mean() to determine the mean electricity consumption of each customer for each year, i.e. 2021, 2022, and 2023.
+   - A bar plot is created using ggplot() that visualizes the mean consumption over years. The plot displays the mean consumption values as bars for each year, and the fill color of the bars represents the magnitude of the mean consumption value. The x-axis displays the year values, and the y-axis displays the mean consumption values. 
+   - By analyzing the pattern of the graph we can say that the average consumption of electricity is increasing year by year with a mean consumption of 3049.8335 in year 2021 and 3875.8301 in year 2022, In the year of 2023 we only have 2 months of consumption data i.e the consumption data of the year 2023 is not sufficient to make  any analysis.   
+
+
+```{r include=FALSE}
+data_clean2 <- data_clean %>% 
+  mutate(consumption_2021  =bill_1_2021+bill_2_2021 +bill_3_2021+bill_4_2021+bill_5_2021+bill_6_2021,
+         consumption_2022  =bill_1_2022+bill_2_2022 +bill_3_2022+bill_4_2022+bill_5_2022+bill_6_2022,
+         consumption_2023  =bill_1_2023)
+data_clean2
+
+mean_consumption <- c(mean(data_clean2$consumption_2021), mean(data_clean2$consumption_2022), mean(data_clean2$consumption_2023))
+mean_consumption
+years <- c("2021", "2022", "2023")
+
+MeanConsumption_by_year <- as.data.frame(years,mean_consumption)
+MeanConsumption_by_year$mean_consumption = as.numeric(mean_consumption)
+
+
+colnames(MeanConsumption_by_year) <- c("Year", "MeanConsumption")
+MeanConsumption_by_year
+
+```
+
+```{r echo=FALSE}
+ggplot(MeanConsumption_by_year, aes(x = Year, y = MeanConsumption, fill = MeanConsumption)) +
+  geom_col()  +
+  labs(title = "Mean Consumption Over Years", x = "Year", y = "Mean Consumption") 
+```
+- Modifying the data frame with the dplyr package's mutate() function and “%>%” operator to add three new columns with names "total_usage," "maximum_usage," and "minimum_usage" . The values for each of these additional columns are obtained by implementing the function's rowSums(),max()and min() respectively on the billing columns of the data set i.e data_clean2[,6:18] . By performing this feature engineering, we are able to obtain each customer's total usage, maximum usage and minimum usage.
+
+```{r include=FALSE}
+data_clean2 <- data_clean2 %>%
+  mutate(total_usage = rowSums(data_clean2[,6:18]) )
+
+data_clean2 <- data_clean2 %>%
+   mutate(maximum_usage = apply(data_clean2[,6:18],1,max) )
+
+data_clean2 <- data_clean2 %>%
+  mutate(minimun_usage = apply(data_clean2[,6:18],1,min))
+
+head(data_clean2,10)
+
+```
+
+• Data exploration and pre-processing: Pre-processing and data exploration are essential processes in the data analysis pipeline. The process of looking at and studying a data set to learn more about its distribution, structure, and relationships between variables is known as data exploration. Finding insights in the data that can guide the analysis and, ultimately, produce more accurate and trustworthy outcomes is the aim of data exploration. Pre-processing is the process of altering and cleaning raw data as needed in order to get it ready for analysis. Pre-processing aims to guarantee that any potential difficulties, such as missing values or outliers, are handled and that the data is in a format that can be properly evaluated. 
+
+- To calculate the iqr, the apply() function is used with a parameter of 2.Calculating the discrepancy between the data's 75th and 25th percentiles involves using the IQR() function.The IQR value for each column of the consumption data is contained in the resulting vector, "iqr."
+Little IQR values suggest a more tightly packed middle 50% of the data, whereas large IQR values show a more spread-out middle 50% of the data, which can be used to spot potential outliers. 
+   - We may conclude that there is a sizable variation in the values across the various time periods and factors based on the interquartile ranges (IQR) of the consumption data. The IQR values for "bill 5 2022" and "bill 4 2022," for instance, are considerably lower than those for the other months, indicating that there may have been less consumption or possibly reduced rates during those times. Yet, "bill 1 2022" and "bill 2 2022" had greater IQRs than the others, which might be a sign of increasing usage or rates during those months.
+   - Although "consumption 2021" and "consumption 2022" have IQRs that are very near to one another, "consumption 2023" has a substantially lower IQR, indicating that usage may decline in the future. Nevertheless, the real cause of the significantly lower IQR in consumption 2023 is that we only have 2 months of consumption data, which is insufficient for any study and may therefore be disregarded. Since "total usage" represents the total of all monthly consumption numbers, a large IQR is to be expected.
+   - The IQR values for "maximum_usage" and "minimum_usage" are quite different, with a much larger range for the maximum usage. This could indicate that some customers are using significantly more energy than others, or that there are occasional spikes in usage for certain customers. In Conclusion we can say that there are potential customer which are not in EV Tarif Plan but may have EV vehicle 
+
+```{r warning=FALSE, include=FALSE}
+billingdata<-data_clean2[,6:24]
+print(summary(billingdata))
+colnames(billingdata)
+# Calculate the IQR for each variable
+iqr <- apply(billingdata, 2, IQR)
+
+```
+- The Z-score (also known as the standard score) is a statistical indicator that shows how many standard deviations a particular data point deviates from the set's mean. It is calculated by dividing by the standard deviation after deducting the mean from the data point.
+   - Using the boxplot() function, generating a box plot of the subset of the data set that contains the identified outliers, and marking the outlier points green.
+   - We will consider the outliers as genuine data points and include them in the analysis depending on the context of the analysis as these are real data points. Extreme values in the data can occasionally be accurate and reflect real-world phenomena. The outlier data point in our situation may be legitimate and should not be viewed as an outlier because consumers who may own EV vehicles may have greater and unusual consumption patterns. In these circumstances, treating the extreme values as genuine data points and incorporating them into the study may be appropriate.
+![My Image](./Plot1.png){width="400" height="300"}
+   
+```{r include=FALSE}
+z_scores <- scale(billingdata)
+outliers <- which(abs(z_scores) > 3, arr.ind = TRUE)
+#print(outliers)
+
+index <- as.data.frame(outliers)
+index<- index$row
+outliers_data <-billingdata[index,]
+boxplot(billingdata[index,],col = "green")
+```
+- Addressing all the null values and droping them from the data set and also removing columns that are not necessary for the analysis while moving to the next step (i.e modelling), thus resulting pre processing of the data. 
+- Separating between clients who are known to be on the EV tariff plain and those who are not, i.e., EV and NON-EV customers (Y/N) and store them in two different data set using fitler() and "%>%" operator
+   - 2516 consumers have an EV vehicle and are on an EV tariff plan, while 184036 users may have an EV vehicle but are on an EV tariff plan.
+   - In order to identify possible clients who might own an EV, we will move our investigation to the next stage.  
+```{r warning=FALSE, include=FALSE}
+
+data_clean2<- data_clean2 %>%
+  subset(select = -c(EV_New_or_Old))
+
+complete_cases<-complete.cases(data_clean2)
+data_clean2 <- data_clean2[complete_cases, ]
+
+colSums(is.na(data_clean2))
+data<-data_clean2
+
+
+
+EV <- data %>%
+      filter(EV=="Y")
+nrow(EV)
+
+unique(EV$mosaicType)
+table(EV$mosaicType)
+
+
+
+count(EV$mosaicType)
+
+Non_EV <- data %>%
+  filter(EV == "N")
+nrow(Non_EV)
+
+
+
+```
+- Modeling: To detect similar cohorts and spot trends in usage and consumption data, a variety of modelling strategies can be applied. Model selection is influenced by the type and organisation of the data, the particular research issue, and the proposed hypotheses.
+Unsupervised machine learning strategies like clustering are one that might be employed.In this instance, we can utilize clustering to classify EV vehicle consumers according to their consumption and usage habits, and then identify a cohort of non-EV customers that display comparable tendencies.
+
+   - K-means clustering technique is employed in our circumstance.Machine learning and data analysis use the clustering technique K-means to divide a set of data points into K clusters based on their similarity. The centre points of each cluster, or K cluster centroids, are chosen at random to start the iterative K-means algorithm. Once the nearest centroid has been allocated to each data point, the centroid is recalculated using the average of all the data points that have been assigned to it. Until the centroids stop moving or a predetermined number of iterations has been reached, this process is repeated.Several applications, including picture segmentation, data compression, and customer segmentation, make extensive use of the K-means algorithm.
+   - K-means clustering is a distance-based clustering algorithm, which means it determines which observations are most similar to one another by calculating the distances between them based on their attributes. Because it is simple to determine distances between numerical values, k-means clustering is frequently applied to numeric data. When having a mixture of category and numeric data, one can use encoding techniques like one-hot encoding or dummy coding to transform the categorical variables into numeric values. Unfortunately, this can result in high-dimensional data, which would be bad for k-means clustering. So, we just use the data set's numerical values to continue.
+   - In order to do k-means clustering, which is a distance-based technique that determines distances between observations based on their attributes, we scale the numerical variables in a data set. Scaling guarantees that each variable makes an equal contribution to the distance calculations, which can enhance the effectiveness of the clustering solution.
+   -  Then, appropriate columns from the original dataset are chosen, and consumers who own electric vehicles (EVs) are then eliminated from the dataset. This is due to the possibility that EV customers' charging behaviours will result in differing billing patterns.
+   - The within-cluster sum of squares (WSS) is then calculated using the k-means algorithm for various cluster counts. The WSS is used to estimate the ideal number of clusters to identify by measuring the variability of the data inside each cluster. The elbow point at k=3, which indicates that three clusters should be found, may be seen on the plot below .
+   ![](./Plot2.png){width="400" height="400"}
+   - The non-EV dataset is then subjected to the k-means clustering algorithm with k=3, and the resulting clusters are shown using ggplot2. After computing the average values for each cluster's bill and consumption variables, the suspicious cluster is chosen as the one with the highest average values.
+   - The visual representation of all the cluster plots against each numerical columns suggest that the cluster 2 for each columns has the highest median values compared to the other clusters (i.e., 1& 2 ) and it also concludes that the consumers in cluster = 2 had higher monthly electricity consumption and higher average year consumption. This might be as a result of using more energy-consuming equipment, or in other words, due to charging an electric vehicle. Thus, validating our choice of cluster = 2.
+   - Lastly, we choose the clients in the suspect cluster and print their consumption and bill information. resulting in those customers who are highly suspected of owning an electric vehicle but are not subscribed to an electric tariff plan
+   - In conclusion, we investigated these customers and their unusual patterns in consumption data and billing data using clustering analysis; these customers are not on an EV tariff plan (EV == "N") but are very suspicious of owning an EV. This analysis can help Energia Group better understand their customers and make data-driven decisions.
+
+![](./Plot3.png){width="580" height="580"}
+
+![](./Plot5.png){width="400" height="400"}
+   
+
+```{r warning=FALSE, include=FALSE}
+
+data <- data_clean2
+# Select the relevant columns
+cols <- c("bill_1_2021", "bill_2_2021", "bill_3_2021", "bill_4_2021", "bill_5_2021", "bill_6_2021", 
+          "bill_1_2022", "bill_2_2022", "bill_3_2022", "bill_4_2022", "bill_5_2022", "bill_6_2022", 
+          "bill_1_2023", "consumption_2021", "consumption_2022", "consumption_2023","total_usage","maximum_usage","minimun_usage","agedBand" ,"signedUpGroup","mosaicType", "EV")
+data <- data[, cols]
+number_coloumns <- ncol(data)
+# Select only the non-EV customers
+non_ev_data<- data[data$EV == "N", -c(20,21,22,23)]
+
+
+wss <- (nrow(non_ev_data)-1)*sum(apply(non_ev_data,2,var))
+
+for (i in 1:10) wss[i] <- sum(kmeans(non_ev_data, centers=i)$withinss)
+plot(1:10, wss, type="b", xlab="Number of Clusters", ylab="Within groups sum of squares",col="blue")
+
+
+# Perform k-means clustering on the non-EV data
+library(stats)
+set.seed(123)
+data<-scale(non_ev_data) 
+k <- 3 # Number of clusters to identify
+clustering <- kmeans(data, centers = k)
+
+# Plot the clusters
+library(ggplot2)
+library(reshape2)
+
+cluster_data <- data.frame(non_ev_data, cluster = clustering$cluster)
+melted_data <- melt(cluster_data, id.vars = "cluster")
+
+
+mean_data <- aggregate(cluster_data[, 1:ncol(cluster_data) - 1], by = list(cluster_data$cluster), mean)
+
+
+selected_cluster <- mean_data$Group.1[which.max(rowMeans(mean_data[, -1]))]
+
+# Find the non-EV customers in the selected cluster
+suspicious_customers <- cluster_data[cluster_data$cluster == selected_cluster, -ncol(cluster_data)]
+
+# Print the suspicious customers
+#suspicious_customers
+
+```
+```{r include=FALSE}
+df_list <- split(melted_data, f = melted_data$variable)
+
+p1<-ggplot(df_list$bill_1_2021, aes(x = df_list$bill_1_2021$variable, y = df_list$bill_1_2021$value, fill = factor(df_list$bill_1_2021$cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+
+p2<-ggplot(df_list$bill_2_2021, aes(x = df_list$bill_2_2021$variable, y = df_list$bill_2_2021$value, fill = factor(df_list$bill_2_2021$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p3 <-ggplot(df_list$bill_3_2021, aes(x = df_list$bill_3_2021$variable, y = df_list$bill_3_2021$value, fill = factor(df_list$bill_3_2021$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p4 <-ggplot(df_list$bill_4_2021, aes(x = df_list$bill_4_2021$variable, y = df_list$bill_4_2021$value, fill = factor(df_list$bill_4_2021$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p5 <-ggplot(df_list$bill_5_2021, aes(x = df_list$bill_5_2021$variable, y = df_list$bill_5_2021$value, fill = factor(df_list$bill_5_2021$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p6 <-ggplot(df_list$bill_6_2021, aes(x = df_list$bill_6_2021$variable, y = df_list$bill_6_2021$value, fill = factor(df_list$bill_6_2021$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+(p1/p2/p3/p4/p5/p6) + plot_layout(ncol = 3,nrow = 2)
+```
+
+
+```{r include=FALSE}
+
+p7<-ggplot(df_list$bill_1_2022, aes(x = df_list$bill_1_2022$variable, y = df_list$bill_1_2022$value, fill = factor(df_list$bill_1_2022$cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+
+p8<-ggplot(df_list$bill_2_2022, aes(x = df_list$bill_2_2022$variable, y = df_list$bill_2_2022$value, fill = factor(df_list$bill_2_2022$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p9 <-ggplot(df_list$bill_3_2022, aes(x = df_list$bill_3_2022$variable, y = df_list$bill_3_2022$value, fill = factor(df_list$bill_3_2022$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p10 <-ggplot(df_list$bill_4_2022, aes(x = df_list$bill_4_2022$variable, y = df_list$bill_4_2022$value, fill = factor(df_list$bill_4_2022$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p11 <-ggplot(df_list$bill_5_2022, aes(x = df_list$bill_5_2022$variable, y = df_list$bill_5_2022$value, fill = factor(df_list$bill_5_2022$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p12 <-ggplot(df_list$bill_6_2022, aes(x = df_list$bill_6_2022$variable, y = df_list$bill_6_2022$value, fill = factor(df_list$bill_6_2022$cluster))) +
+  geom_boxplot()+labs( x = "variable", y = "value",fill = "cluster")
+
+p13 <-ggplot(df_list$bill_1_2023, aes(x = df_list$bill_1_2023$variable, y = df_list$bill_1_2023$value, fill = factor(df_list$bill_1_2023$cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+
+
+(p7/p8/p9/p10/p11/p12/p13) + plot_layout(ncol = 3,nrow = 3,guides='collect')
+```
+
+```{r include=FALSE}
+
+p14 <-ggplot(df_list$consumption_2021 , aes(x = df_list$consumption_2021 $variable, y = df_list$consumption_2021 $value, fill = factor(df_list$consumption_2021 $cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+p15 <-ggplot(df_list$consumption_2022 , aes(x = df_list$consumption_2022 $variable, y = df_list$consumption_2022 $value, fill = factor(df_list$consumption_2022 $cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+p16 <-ggplot(df_list$consumption_2023 , aes(x = df_list$consumption_2023 $variable, y = df_list$consumption_2023 $value, fill = factor(df_list$consumption_2023 $cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+
+(p14/p15/p16)+ plot_layout(ncol = 3,guides='collect')
+
+p17 <-ggplot(df_list$total_usage , aes(x = df_list$total_usage $variable, y = df_list$total_usage $value, fill = factor(df_list$total_usage $cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+p18 <-ggplot(df_list$maximin_usage, aes(x = df_list$maximum_usage$variable, y = df_list$maximum_usage $value, fill = factor(df_list$maximum_usage $cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+p19 <-ggplot(df_list$minimun_usage    , aes(x = df_list$minimun_usage    $variable, y = df_list$minimun_usage    $value, fill = factor(df_list$minimun_usage    $cluster))) +
+  geom_boxplot()+ labs( x = "variable", y = "value", fill = "cluster")
+
+(p17/p18/p19)+ plot_layout(ncol = 3,guides='collect')
+
+```
+- Enhancing our finding
+
+   - After executing our machine learning model, the results interprets that their are 16,353 customers signed up with Energia Group may own an electric vehicle but are not on their EV tariff Plain.
+   - The number of customers i.e 16353 number of customers is very large in population which make it difficult for Energia to perform customer acquisition which could ultimately lead to those new customers switching to EV tariff plain. 
+   - A threshold is formulate in order to filter potential EV owners thus enhancing the finding and produce a more refined list of EV owners
+   - We have used mosaic Type as our threshold in  order to enhance  the finding and produce a more refined list of EV owners.
+   - The pdf file "mosaic-ireland-brochure.pdf" provided by the Energia group as a supporting material for our analysis holds all the information about different demographic types .
+   - According to certain data, wealthy and affluent people are more likely to acquire electric automobiles. This is due to the fact that electric cars are often more expensive than conventional gasoline-powered cars, and wealthier people may be better able to afford the higher initial cost.
+   - According to U.S.Energy Information Administration (2018) and also The Energy Information Administration reports that 67 percent of households with electric vehicle ownership earn more than $100,000 annually(Orr, 2021).
+   - We have refined our results to select only those customers who belongs to a particular set demographic types and wealthy and affluent as our threshold. The resulting transformation produces new list of customers whom are more likely to own an EV with , a total population of 5,985 customers.
+   
+
+```{r include=FALSE}
+suspicious_customers
+my_index <- rownames(suspicious_customers)
+my_results <- Non_EV[my_index, ]
+
+unique(my_results$mosaicType)
+
+suspected_EV_customer <-subset(my_results,mosaicType %in% c("A01","A02","A03","B04","B05","B06","C07","C08","C09","J26","J27", "J28"))
+
+
+```
+# RESULTS  
+
+- After performing Unsupervised machine learning strategy i.e., K-means clustering on the pre-processed data set to identify patterns in the usage and consumption of EV customers and find a cohort of non-EV customers with similar patterns, which could be highly suspicious of being EV customers : we get  16,353  new customers on top of 2,516 existing EV customers that may have EV vehicle but are not on EV tariff plain . 
+- This makes it harder for Energia to carry out client acquisition, which can ultimately result in those new consumers migrating to EV tariff plain. There are 16353 customers, which is a relatively large amount in terms of population.
+- To improve the discovery and provide a more specialized list of EV owners, a threshold is created to screen possible EV owners.
+- After executing the threshold to refine our finding thus, producing a total of 5,985 new  customers in top of 2,516 existing EV customers that may own an electric vehicle but are not on EV tariff plain. 
+
+
+# CONCLUSION 
+
+- Energia now has the chance to employ data-driven decision-making and better understand their client base thanks to the discovery of 5,985 new customers. Energia can enhance their customer acquisition approach by studying this data, which will eventually persuade these new consumers to switch to an electric vehicle (EV) pricing plan.
+We have discovered patterns and trends in the client base using data analysis tools, which may be used to target marketing and customer retention initiatives. This strategy may result in more successful and efficient customer acquisition, which will increase client loyalty and satisfaction.
+- Encouragement of customers to migrate to an EV tariff plan is a wise business decision on the part of Energia given the rising demand for renewable energy sources. Energia can entice new consumers who care about the environment and wish to lessen their carbon footprint by providing alluring EV tariff offers.
+In conclusion, Energia has a fantastic potential to grow their business and draw new clients to their EV tariff plan thanks to the finding of these new clients. Energia can enhance their client acquisition approach and give customers looking for sustainable energy solutions a useful service by utilising data-driven insights.
+
+# REFRENCES
+
+U.S. Energy Information Administration (2018) Electrified vehicles continue to see slow growth and less use than conventional vehicles, Homepage - U.S. Energy Information Administration (EIA). Available at: https://www.eia.gov/todayinenergy/detail.php?id=36312&amp;src=email (Accessed: April 19, 2023). 
+
+Orr, I. (2021) Electric cars are mostly for wealthy people, and you're subsidizing their purchase, American Experiment. Available at: https://www.americanexperiment.org/electric-cars-are-mostly-for-wealthy-people-and-youre-subsidizing-their-purchase/ (Accessed: April 17, 2023). 
+
+
+
+
+
+
+
+
+
+
+
+
+
