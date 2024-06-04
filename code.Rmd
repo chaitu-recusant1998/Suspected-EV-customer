@@ -1,6 +1,6 @@
 ---
 title: "DSA 8023 : Suspected EV Customers Challenge"
-author: "Akshay Kumar Dhar (40360300)"
+author: "Sai Chaitanya Mondi"
 output:
   pdf_document: default
         
